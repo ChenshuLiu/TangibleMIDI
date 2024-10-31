@@ -43,6 +43,10 @@ def control_audio_with_landmarks(landmarks):
         print(f"Adjusting volume to {volume * 100:.2f}%")
     elif controlled_feature == 'reverb':
         pass
+    elif controlled_feature == 'pitch': 
+        middle_finger_tip = landmarks.landmark[mp.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP]
+        pitch = max(0, min(1, 1 - middle_finger_tip.y))
+        pygame.mixer.music.set_pos
     else: # when none
         pass
 
@@ -80,7 +84,7 @@ while cap.isOpened():
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
             # for cm
-            radius_cm = 35
+            radius_cm = 50
             temp_landmarks = landmarks_to_list(hand_landmarks) # numpy array with shape [21, 3]
             temp_landmarks_palm = temp_landmarks[[0, 1, 2, 5, 9, 13, 17], :]
             cm_x, cm_y, _ = np.mean(temp_landmarks, axis=0)
@@ -108,6 +112,13 @@ while cap.isOpened():
                                       [cm_x_palm, cm_y_palm], radius_cm):
                 landmark_color_middle = (0, 0, 255)
                 landmark_drawing_spec = mp_drawing.DrawingSpec(color=landmark_color_middle, circle_radius=5)
+                controlled_feature = 'pitch'
+            elif contact_with_palm_cm([temp_landmarks[4, 0]*frame.shape[1], temp_landmarks[4, 1]*frame.shape[0]],
+                                      [temp_landmarks[8, 0]*frame.shape[1], temp_landmarks[8, 1]*frame.shape[0]],
+                                      radius = 35): # the pitch is detected between index and thumb
+                landmark_color_pinch = (255, 0, 0)
+                landmark_drawing_spec = mp_drawing.DrawingSpec(color=landmark_color_pinch, circle_radius=5)
+                controlled_feature = 'reverb'
 
             mp_drawing.draw_landmarks(frame, hand_landmarks, mp.solutions.hands.HAND_CONNECTIONS, landmark_drawing_spec)
 
