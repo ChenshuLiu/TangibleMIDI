@@ -5,10 +5,12 @@ import librosa
 import numpy as np
 import time
 import mediapipe as mp
+import math
 
 # Load and prepare audio
 audio, sr = librosa.load("/Users/chenshu/Documents/Research/Mediapipe/Sia - Unstoppable (Official Video - Live from the Nostalgic For The Present Tour).mp3", sr=None)
 volume_factor = 1.0  # Initial volume level
+pitch_factor = 0 # unchanged (not shifting the pitch at all) 4 steps is a major third
 
 # Lock for thread-safe data sharing
 stop_threads = False
@@ -31,7 +33,7 @@ def contact_with_palm_cm(tip_coord, cm_coord, radius):
 
 # Audio playback function
 def play_audio():
-    global stop_threads, volume_factor
+    global stop_threads, volume_factor, pitch_factor
     
     def callback(outdata, frames, time, status):
         nonlocal audio_position
@@ -41,8 +43,10 @@ def play_audio():
         # Apply volume factor in a thread-safe way
         with lock:
             current_volume = volume_factor  # Safely read the volume factor
+            current_pitch = pitch_factor
 
-        chunk = audio[audio_position:audio_position + frames] * current_volume
+        chunk = audio[audio_position:audio_position + frames] * current_volume # changing according to current volume level
+        chunk = librosa.effects.pitch_shift(y=chunk, sr=sr, n_steps=current_pitch) # changing according to current pitch level
         audio_position += frames
 
         # End playback if at the end of the audio data
@@ -61,9 +65,7 @@ def play_audio():
 
 # Video processing and landmark detection function
 def process_video():
-    global current_landmark
-    global controlled_feature
-    global stop_threads
+    global current_landmark, controlled_feature, stop_threads
     mp_hands = mp.solutions.hands.Hands()
     mp_drawing = mp.solutions.drawing_utils
     cap = cv2.VideoCapture(0)
@@ -138,7 +140,7 @@ def process_video():
 
 # Control function to adjust audio based on landmarks
 def control_audio():
-    global current_landmark, volume_factor, stop_threads
+    global current_landmark, volume_factor, stop_threads, pitch_factor
     while not stop_threads:
         # Read landmark data safely
         with lock:
@@ -153,7 +155,8 @@ def control_audio():
                     pass
                 elif controlled_feature == 'pitch': 
                     middle_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP]
-                    pitch = max(0, min(1, 1 - middle_finger_tip.y))
+                    pitch_factor = math.floor((1-middle_finger_tip.y) * 10) # clipping 0-9
+                    print(f"Adjusting pitch by {pitch_factor} steps")
                 else: # when none of feature specified
                     pass
         time.sleep(0.01) # check for hand updates every 100ms
