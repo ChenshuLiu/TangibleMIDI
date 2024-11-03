@@ -10,7 +10,7 @@ from pydub import AudioSegment
 from collections import deque
 
 # Load and prepare audio
-audio, sr = librosa.load("/Users/chenshu/Documents/Research/Mediapipe/Sia - Unstoppable (Official Video - Live from the Nostalgic For The Present Tour).mp3", sr=None)
+audio, sr = librosa.load("./Sia - Unstoppable.mp3", sr=None)
 volume_factor = 1.0  # controlling volume level
 pitch_factor = 0 # controlling pitch level (not shifting the pitch at all) 4 steps is a major third
 reverb_factor = 0 # overlaying (looping to add delayed chunks)
