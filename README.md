@@ -6,6 +6,11 @@
 ## Operation
 Video demo can be access on [Youtube](https://youtu.be/5DegdKCca4c). There are three controllable musical features: volume, pitch, echo, controlled by thumb, index finger, and middle finger. Refer to the table below for specifics.
 
+Before running the `TangibleMIDI.py` file, run the following:
+```
+pip install -r requirements.txt
+```
+
 | Ground | Volume | Pitch | Echo |
 |:-------:|:-------:|:-------:|:-------:|
 | ![Ground](misc/Ground.png) | ![Volume](misc/Volume.png) | ![Pitch](misc/Pitch.png) | ![Echo](misc/Echo.png) |
