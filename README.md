@@ -10,7 +10,7 @@ Before running the `TangibleMIDI.py` file, run the following:
 ```
 python -m venv TangibleMIDI
 source TangibleMIDI/bin/activate
-pip install -r requirements.txt
+pip install -r requirement.txt
 ```
 
 | Ground | Volume | Pitch | Echo |
