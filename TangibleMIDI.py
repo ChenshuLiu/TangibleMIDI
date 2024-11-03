@@ -6,17 +6,31 @@ import numpy as np
 import time
 import mediapipe as mp
 import math
+from pydub import AudioSegment
+from collections import deque
 
 # Load and prepare audio
 audio, sr = librosa.load("/Users/chenshu/Documents/Research/Mediapipe/Sia - Unstoppable (Official Video - Live from the Nostalgic For The Present Tour).mp3", sr=None)
-volume_factor = 1.0  # Initial volume level
-pitch_factor = 0 # unchanged (not shifting the pitch at all) 4 steps is a major third
+volume_factor = 1.0  # controlling volume level
+pitch_factor = 0 # controlling pitch level (not shifting the pitch at all) 4 steps is a major third
+reverb_factor = 0 # overlaying (looping to add delayed chunks)
 
-# Lock for thread-safe data sharing
+echo1_delay_ms = 0.1 # delay 20ms
+echo1_volume_level = 0.6
+echo1 = np.concatenate((np.zeros(int(echo1_delay_ms*sr)), audio))[:len(audio)]
+echo2_delay_ms = 0.2 # delay 20ms
+echo2_volume_level = 0.4
+echo2 = np.concatenate((np.zeros(int(echo2_delay_ms*sr)), audio))[:len(audio)]
+echo3_delay_ms = 0.25 # delay 20ms
+echo3_volume_level = 0.2
+echo3 = np.concatenate((np.zeros(int(echo3_delay_ms*sr)), audio))[:len(audio)]
+
+# thread management
 stop_threads = False
+audio_position = 0
 lock = threading.Lock()
 current_landmark = None  # To store landmark information
-controlled_feature = None
+controlled_feature = None # features that can be controlled (volume, pitch level, reverb significance)
 
 def landmarks_to_list(landmark_list):
     """Converts a MediaPipe NormalizedLandmarkList to a Python list of landmarks."""
@@ -30,6 +44,12 @@ def contact_with_palm_cm(tip_coord, cm_coord, radius):
     if range_dist >= np.sum([(cm_coord[idx] - tip_coord[idx])**2 for idx in range(len(tip_coord))]):
         interact = True
     return interact # bool (whether in contact)
+
+# def distance_between_two_points(coord1, coord2): # for determining the openness between the two fingers
+#     # coords are [x, y]
+#     dist_sq = np.sum([(coord1[idx] - coord2[idx]) ** 2 for idx in range(len(coord1))])
+#     dist_sqrt = math.sqrt(dist_sq)
+#     return dist_sqrt
 
 # Audio playback function
 def play_audio():
@@ -57,11 +77,43 @@ def play_audio():
         else:
             outdata[:] = chunk[:, np.newaxis]
 
+    def echo_callback(outdata, frames, time, status):
+        global reverb_factor
+        nonlocal audio_position 
+        if status:
+            print(status)
+        
+        if reverb_factor:
+            with lock:
+                current_volume = volume_factor  # Safely read the volume factor
+                current_pitch = pitch_factor
+            echo_audio_position = audio_position - frames
+            echo1_chunk = echo1[echo_audio_position:echo_audio_position + frames] * current_volume * echo1_volume_level
+            echo1_chunk = librosa.effects.pitch_shift(y=echo1_chunk, sr=sr, n_steps=current_pitch)
+            echo2_chunk = echo2[echo_audio_position:echo_audio_position + frames] * current_volume * echo2_volume_level
+            echo2_chunk = librosa.effects.pitch_shift(y=echo2_chunk, sr=sr, n_steps=current_pitch)
+            echo3_chunk = echo3[echo_audio_position:echo_audio_position + frames] * current_volume * echo3_volume_level
+            echo3_chunk = librosa.effects.pitch_shift(y=echo3_chunk, sr=sr, n_steps=current_pitch)
+            combined_chunk = echo1_chunk + echo2_chunk + echo3_chunk
+
+            # End playback if at the end of the audio data
+            if len(combined_chunk) < frames:
+                outdata[:len(combined_chunk)] = combined_chunk[:, np.newaxis]
+                outdata[len(combined_chunk):] = 0
+                raise sd.CallbackStop
+            else:
+                outdata[:] = combined_chunk[:, np.newaxis]
+
+        else:
+            outdata[:] = 0
+
     # Set the initial position for audio
     audio_position = 0
-    with sd.OutputStream(samplerate=sr, channels=1, callback=callback):
+    with sd.OutputStream(samplerate=sr, channels=1, callback=callback) as main_audio_stream, \
+        sd.OutputStream(samplerate=sr, channels=1, callback=echo_callback) as echo_audio_stream:
         while not stop_threads:
-            time.sleep(0.1)
+            time.sleep(0.01)
+
 
 # Video processing and landmark detection function
 def process_video():
@@ -122,7 +174,7 @@ def process_video():
                     controlled_feature = 'pitch'
                 elif contact_with_palm_cm([temp_landmarks[4, 0]*frame.shape[1], temp_landmarks[4, 1]*frame.shape[0]],
                                         [temp_landmarks[8, 0]*frame.shape[1], temp_landmarks[8, 1]*frame.shape[0]],
-                                        radius = 35): # the pitch is detected between index and thumb
+                                        radius = 40): # the pitch is detected between index and thumb
                     landmark_color_pinch = (255, 0, 0)
                     landmark_drawing_spec = mp_drawing.DrawingSpec(color=landmark_color_pinch, circle_radius=5)
                     controlled_feature = 'reverb'
@@ -140,7 +192,7 @@ def process_video():
 
 # Control function to adjust audio based on landmarks
 def control_audio():
-    global current_landmark, volume_factor, stop_threads, pitch_factor
+    global current_landmark, volume_factor, stop_threads, pitch_factor, reverb_factor
     while not stop_threads:
         # Read landmark data safely
         with lock:
@@ -152,7 +204,12 @@ def control_audio():
                     volume_factor = max(0, min(1, 1 - index_finger_tip.y))  # Clamp volume to 0-1
                     print(f"Adjusting volume to {volume_factor * 100:.2f}%")
                 elif controlled_feature == 'reverb':
-                    pass
+                    # index_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_TIP]
+                    # thumb_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.THUMB_TIP] # todo: find out the type of the coordinates (are they lists?)
+                    # dist_index_middle = distance_between_two_points([index_finger_tip.x, index_finger_tip.y], 
+                    #                                                 [thumb_finger_tip.x, thumb_finger_tip.y]) * 10
+                    reverb_factor = not reverb_factor  # binary echo (single echo)
+                    if reverb_factor: print(f"Echo is being applied")
                 elif controlled_feature == 'pitch': 
                     middle_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP]
                     pitch_factor = math.floor((1-middle_finger_tip.y) * 10) # clipping 0-9
@@ -169,3 +226,5 @@ control_thread.start()
 audio_thread.start()
 
 process_video()
+
+# Todo: how about making the trajectory stay for a while, for example, I writing a word to construct a piece of melody
