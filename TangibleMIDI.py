@@ -129,6 +129,11 @@ def play_audio():
 # Video processing and landmark detection function
 def process_video():
     global current_landmark, controlled_feature, stop_threads
+    global volume_factor, pitch_factor, reverb_factor # for displaying the values
+    textcoord = None
+    tag_message = None
+    textcolor = None
+
     mp_hands = mp.solutions.hands.Hands()
     mp_drawing = mp.solutions.drawing_utils
     cap = cv2.VideoCapture(0)
@@ -149,6 +154,9 @@ def process_video():
             if results.multi_hand_landmarks:
                 # Update shared landmarks for the audio thread
                 current_landmark = results.multi_hand_landmarks[0]  # Using first detected hand
+            
+            current_pitch = pitch_factor
+            current_echo = reverb_factor
 
         # Draw hand landmarks on the frame for visualization
         if results.multi_hand_landmarks:
@@ -172,28 +180,49 @@ def process_video():
                     # thumb release the current feature being controlled
                     landmark_drawing_spec = mp_drawing_styles.get_default_hand_landmarks_style()
                     controlled_feature = None
+                    tag_message = "No feature controlled"
+                    textcoord = 4
+                    textcolor = (0, 0, 0)
                 elif contact_with_palm_cm([temp_landmarks[8, 0]*frame.shape[1], temp_landmarks[8, 1]*frame.shape[0]], 
                                         [cm_x_palm, cm_y_palm], radius_cm):
                     # index control the loudness of the audio
                     landmark_color_index = (0, 255, 0)
                     landmark_drawing_spec = mp_drawing.DrawingSpec(color=landmark_color_index, circle_radius=5)
                     controlled_feature = 'volume'
+                    with lock: current_volume = volume_factor
+                    tag_message = f"Volume adjusted"
+                    textcoord = 8
+                    textcolor = landmark_color_index
                 elif contact_with_palm_cm([temp_landmarks[12, 0]*frame.shape[1], temp_landmarks[12, 1]*frame.shape[0]], 
                                         [cm_x_palm, cm_y_palm], radius_cm):
                     landmark_color_middle = (0, 0, 255)
                     landmark_drawing_spec = mp_drawing.DrawingSpec(color=landmark_color_middle, circle_radius=5)
                     controlled_feature = 'pitch'
+                    textcoord = 12
+                    tag_message = f"Pitch adjusted"
+                    textcolor = landmark_color_middle
                 elif contact_with_palm_cm([temp_landmarks[4, 0]*frame.shape[1], temp_landmarks[4, 1]*frame.shape[0]],
                                         [temp_landmarks[8, 0]*frame.shape[1], temp_landmarks[8, 1]*frame.shape[0]],
                                         radius = 30): # the pitch is detected between index and thumb
                     landmark_color_pinch = (255, 0, 0)
                     landmark_drawing_spec = mp_drawing.DrawingSpec(color=landmark_color_pinch, circle_radius=5)
                     controlled_feature = 'reverb'
-
+                    textcoord = 4
+                    tag_message = f"Reverb"
+                    textcolor = landmark_color_pinch
                 mp_drawing.draw_landmarks(frame, hand_landmarks, mp.solutions.hands.HAND_CONNECTIONS, landmark_drawing_spec)
 
+                if textcoord is not None and textcolor is not None:
+                    cv2.putText(frame, tag_message, (int(temp_landmarks[textcoord, 0]*frame.shape[1]), 
+                                                                int(temp_landmarks[textcoord, 1]*frame.shape[0] + 100)), 
+                                                                fontFace = cv2.FONT_HERSHEY_SIMPLEX,
+                                                                fontScale = 0.5,
+                                                                color = textcolor,
+                                                                thickness=1,
+                                                                lineType = cv2.LINE_AA)
         # Show the video frame
         cv2.imshow("Hand Tracking", frame)
+        
 
         if cv2.waitKey(5) & 0xFF == 27:  # Press 'Esc' to exit
             stop_threads = True
@@ -229,11 +258,11 @@ def control_audio():
                     controlled_feature = None # because this is a one time operation, need to exit to ground everytime detect a pinch
                 elif controlled_feature == 'pitch': 
                     middle_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP]
-                    pitch_factor = math.floor((1-middle_finger_tip.y) * 10) # clipping 0-9
+                    pitch_factor = int(math.floor((1-middle_finger_tip.y) * 10)/4) # clipping 0-9
                     print(f"Adjusting pitch by {pitch_factor} steps")
                 else: # when none of feature specified
                     pass
-        time.sleep(0.2) # check for hand updates every 100ms
+        time.sleep(0.5) # check for hand updates every 100ms
 
 # Set up and start threads
 audio_thread = threading.Thread(target=play_audio)
