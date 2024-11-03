@@ -10,7 +10,9 @@ Before running the `TangibleMIDI.py` file, run the following:
 ```
 python -m venv TangibleMIDI
 source TangibleMIDI/bin/activate
+brew install portaudio
 pip install -r requirement.txt
+python TangibleMIDI.py
 ```
 
 | Ground | Volume | Pitch | Echo |
