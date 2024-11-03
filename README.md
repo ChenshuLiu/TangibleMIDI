@@ -4,6 +4,8 @@
 **TangibleMIDI** uses hand landmarks, captured by Mediapipe, to dynamically control audio data. Breaking the constraint from physical musical instruments.
 
 ## Operation
+Video demo can be access on [Youtube](https://youtu.be/5DegdKCca4c). There are three controllable musical features: volume, pitch, echo, controlled by thumb, index finger, and middle finger. Refer to the table below for specifics.
+
 | Ground | Volume | Pitch | Echo |
 |:-------:|:-------:|:-------:|:-------:|
 | ![Ground](misc/Ground.png) | ![Volume](misc/Volume.png) | ![Pitch](misc/Pitch.png) | ![Echo](misc/Echo.png) |
