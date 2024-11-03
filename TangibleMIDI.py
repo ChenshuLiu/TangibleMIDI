@@ -25,6 +25,10 @@ echo3_delay_ms = 0.25 # delay 20ms
 echo3_volume_level = 0.2
 echo3 = np.concatenate((np.zeros(int(echo3_delay_ms*sr)), audio))[:len(audio)]
 
+echo_switch = deque(maxlen=2)
+echo_switch.append(reverb_factor)
+echo_switch.append(reverb_factor)
+
 # thread management
 stop_threads = False
 audio_position = 0
@@ -50,6 +54,13 @@ def contact_with_palm_cm(tip_coord, cm_coord, radius):
 #     dist_sq = np.sum([(coord1[idx] - coord2[idx]) ** 2 for idx in range(len(coord1))])
 #     dist_sqrt = math.sqrt(dist_sq)
 #     return dist_sqrt
+
+# def pinch_detection(coord1, coord2, radius):
+#     dist_sqrt = math.sqrt(np.sum([(coord1[idx] - coord2[idx])**2 for idx in range(len(coord1))]))
+#     if dist_sqrt <= radius:
+#         pinch = True
+#     else:
+#         pinch = False
 
 # Audio playback function
 def play_audio():
@@ -174,7 +185,7 @@ def process_video():
                     controlled_feature = 'pitch'
                 elif contact_with_palm_cm([temp_landmarks[4, 0]*frame.shape[1], temp_landmarks[4, 1]*frame.shape[0]],
                                         [temp_landmarks[8, 0]*frame.shape[1], temp_landmarks[8, 1]*frame.shape[0]],
-                                        radius = 40): # the pitch is detected between index and thumb
+                                        radius = 30): # the pitch is detected between index and thumb
                     landmark_color_pinch = (255, 0, 0)
                     landmark_drawing_spec = mp_drawing.DrawingSpec(color=landmark_color_pinch, circle_radius=5)
                     controlled_feature = 'reverb'
@@ -192,7 +203,7 @@ def process_video():
 
 # Control function to adjust audio based on landmarks
 def control_audio():
-    global current_landmark, volume_factor, stop_threads, pitch_factor, reverb_factor
+    global current_landmark, volume_factor, stop_threads, pitch_factor, reverb_factor, echo_switch, controlled_feature
     while not stop_threads:
         # Read landmark data safely
         with lock:
@@ -203,20 +214,26 @@ def control_audio():
                     index_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_TIP]
                     volume_factor = max(0, min(1, 1 - index_finger_tip.y))  # Clamp volume to 0-1
                     print(f"Adjusting volume to {volume_factor * 100:.2f}%")
-                elif controlled_feature == 'reverb':
+                elif controlled_feature == 'reverb': 
                     # index_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.INDEX_FINGER_TIP]
                     # thumb_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.THUMB_TIP] # todo: find out the type of the coordinates (are they lists?)
                     # dist_index_middle = distance_between_two_points([index_finger_tip.x, index_finger_tip.y], 
                     #                                                 [thumb_finger_tip.x, thumb_finger_tip.y]) * 10
-                    reverb_factor = not reverb_factor  # binary echo (single echo)
-                    if reverb_factor: print(f"Echo is being applied")
+                    # reverb_factor = pinch_detection([index_finger_tip.x, index_finger_tip.y], 
+                    #                                 [thumb_finger_tip.x, thumb_finger_tip.y], 20)  # binary echo (single echo)
+                    # echo_switch.append(not echo_switch[1])
+                    # reverb_factor = echo_switch[1]
+
+                    reverb_factor = not reverb_factor
+                    print(f"reverb factor {reverb_factor}")
+                    controlled_feature = None # because this is a one time operation, need to exit to ground everytime detect a pinch
                 elif controlled_feature == 'pitch': 
                     middle_finger_tip = current_landmark.landmark[mp.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP]
                     pitch_factor = math.floor((1-middle_finger_tip.y) * 10) # clipping 0-9
                     print(f"Adjusting pitch by {pitch_factor} steps")
                 else: # when none of feature specified
                     pass
-        time.sleep(0.01) # check for hand updates every 100ms
+        time.sleep(0.2) # check for hand updates every 100ms
 
 # Set up and start threads
 audio_thread = threading.Thread(target=play_audio)
