@@ -8,6 +8,8 @@ Video demo can be access on [Youtube](https://youtu.be/5DegdKCca4c). There are t
 
 Before running the `TangibleMIDI.py` file, run the following:
 ```
+python -m TangibleMIDI
+source TangibleMIDI/bin/activate
 pip install -r requirements.txt
 ```
 
